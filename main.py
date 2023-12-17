@@ -1,5 +1,7 @@
+import os
 import random
-from abc import ABC, abstractmethod, abstractproperty
+import time
+from abc import ABC, abstractmethod
 from enum import Enum
 
 import numpy as np
@@ -43,6 +45,7 @@ class SimpleGrid(Env):
         n_walls: int,
         start: tuple[int, int],
         terminal: tuple[int, int],
+        max_step: int = 100,
     ):
         self.row_size = row_size
         self.col_size = col_size
@@ -51,6 +54,9 @@ class SimpleGrid(Env):
         self.terminal = terminal
         self._action_space = Discrete(4)
         self._state_space = VectorState(2)
+        self.done = False
+        self.timestep = 0
+        self.max_step = max_step
 
         self.walls = []
         for _ in range(n_walls):
@@ -60,10 +66,10 @@ class SimpleGrid(Env):
             self.walls.append(loc)
 
         self.rewards = {terminal: +1}
-        hole = random.randint(0, row_size - 1), random.randint(0, col_size - 1)
-        while hole == start or hole == terminal or hole in self.walls:
-            hole = random.randint(0, row_size - 1), random.randint(0, col_size - 1)
-        self.rewards[hole] = -1
+        self.hole = random.randint(0, row_size - 1), random.randint(0, col_size - 1)
+        while self.hole == start or self.hole == terminal or self.hole in self.walls:
+            self.hole = random.randint(0, row_size - 1), random.randint(0, col_size - 1)
+        self.rewards[self.hole] = -1
 
     @property
     def action_space(self):
@@ -74,23 +80,27 @@ class SimpleGrid(Env):
         return self._state_space
 
     def step(self, action):
-        action = SimpleGrid.Action(action)
-        x, y = self._state_space.data
-        if action == SimpleGrid.Action.UP:
-            if y != 0:
-                y -= 1
-        elif action == SimpleGrid.Action.RIGHT:
-            if y != self.col_size - 1:
-                x += 1
-        elif action == SimpleGrid.Action.DOWN:
-            if y != self.row_size - 1:
-                y += 1
-        elif action == SimpleGrid.Action.LEFT:
-            if x != 0:
-                x -= 1
+        if self.done:
+            raise Exception("Env has reached the terminal state")
 
-        if (x, y) not in self.walls:
-            self._state_space.data = np.array((x, y))
+        self.timestep += 1
+        action = SimpleGrid.Action(action)
+        i, j = self._state_space.data
+        if action == SimpleGrid.Action.UP:
+            if i != 0:
+                i -= 1
+        elif action == SimpleGrid.Action.RIGHT:
+            if j != self.col_size - 1:
+                j += 1
+        elif action == SimpleGrid.Action.DOWN:
+            if i != self.row_size - 1:
+                i += 1
+        elif action == SimpleGrid.Action.LEFT:
+            if j != 0:
+                j -= 1
+
+        if (i, j) not in self.walls:
+            self._state_space.data = np.array((i, j))
 
         state = tuple(self._state_space.data)
         try:
@@ -98,18 +108,30 @@ class SimpleGrid(Env):
         except KeyError:
             reward = 0
 
-        done = False
-        if state == self.terminal:
-            done = True
+        if state == self.terminal or self.timestep >= self.max_step:
+            self.done = True
 
-        return self._state_space, reward, done
+        return self._state_space, reward, self.done
 
     def reset(self):
         self._state_space.data = self.start
         return self._state_space
 
     def visualize(self):
-        print(self.state_space.data)
+        for i in range(self.row_size):
+            for j in range(self.col_size):
+                if (i, j) in self.walls:
+                    print("#", end="")
+                elif (i, j) == tuple(self.state_space.data):
+                    print("x", end="")
+                elif (i, j) == self.hole:
+                    print("o", end="")
+                else:
+                    print(".", end="")
+            print()
+        time.sleep(0.25)
+        if not self.done:
+            os.system("cls")
 
 
 class ActionSpace(ABC):
@@ -140,21 +162,18 @@ MAX_STEP = 100
 
 
 def inference():
-    env = SimpleGrid(4, 4, 4, (3, 0), (0, 3))
+    env = SimpleGrid(4, 4, 4, (3, 0), (0, 3), 100)
     done = False
     total_reward = 0
     step = 0
     state = env.reset()
-    while not done and step < MAX_STEP:
+    while not done:
         action = env.action_space.random()
         state, reward, done = env.step(action)
         total_reward += reward
         step += 1
         env.visualize()
-    if done:
-        print("Finish")
-    else:
-        print("Timeout")
+    print("Done")
     print(f"Total reward: {total_reward}")
     print(f"Total step: {step}")
 
