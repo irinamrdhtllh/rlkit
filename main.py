@@ -54,7 +54,8 @@ class SimpleGrid(Env):
         self.terminal = terminal
         self._action_space = Discrete(4)
         self._state_space = VectorState(2)
-        self.done = False
+        self.terminated = False
+        self.truncated = False
         self.timestep = 0
         self.max_step = max_step
 
@@ -80,8 +81,10 @@ class SimpleGrid(Env):
         return self._state_space
 
     def step(self, action):
-        if self.done:
+        if self.terminated:
             raise Exception("Env has reached the terminal state")
+        if self.truncated:
+            raise Exception("Env has reached the maximum timestep")
 
         self.timestep += 1
         action = SimpleGrid.Action(action)
@@ -108,10 +111,12 @@ class SimpleGrid(Env):
         except KeyError:
             reward = 0
 
-        if state == self.terminal or self.timestep >= self.max_step:
-            self.done = True
+        if state == self.terminal:
+            self.terminated = True
+        elif self.timestep >= self.max_step:
+            self.truncated = True
 
-        return self._state_space, reward, self.done
+        return self._state_space, reward, self.terminated, self.truncated
 
     def reset(self):
         self._state_space.data = self.start
@@ -130,7 +135,7 @@ class SimpleGrid(Env):
                     print(".", end="")
             print()
         time.sleep(0.25)
-        if not self.done:
+        if not self.terminated or not self.truncated:
             os.system("cls")
 
 
@@ -169,11 +174,15 @@ def inference():
     state = env.reset()
     while not done:
         action = env.action_space.random()
-        state, reward, done = env.step(action)
+        state, reward, terminated, truncated = env.step(action)
+        done = terminated or truncated
         total_reward += reward
         step += 1
         env.visualize()
-    print("Done")
+    if terminated:
+        print("Finish")
+    if truncated:
+        print("Timeout")
     print(f"Total reward: {total_reward}")
     print(f"Total step: {step}")
 
