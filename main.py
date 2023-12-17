@@ -1,26 +1,18 @@
 import random
 from abc import ABC, abstractmethod, abstractproperty
-from dataclasses import dataclass
-from enum import Enum, auto
+from enum import Enum
 
 import numpy as np
 
 
-@dataclass
-class State:
-    x: int
-    y: int
-
-    def __hash__(self):
-        return hash((self.x, self.y))
-
-
 class Env(ABC):
-    @abstractproperty
+    @property
+    @abstractmethod
     def action_space(self):
         pass
 
-    @abstractproperty
+    @property
+    @abstractmethod
     def state_space(self):
         pass
 
@@ -30,6 +22,10 @@ class Env(ABC):
 
     @abstractmethod
     def reset(self):
+        pass
+
+    @abstractmethod
+    def visualize(self):
         pass
 
 
@@ -53,6 +49,8 @@ class SimpleGrid(Env):
         self.n_walls = n_walls
         self.start = start
         self.terminal = terminal
+        self._action_space = Discrete(4)
+        self._state_space = VectorState(2)
 
         self.walls = []
         for _ in range(n_walls):
@@ -69,15 +67,15 @@ class SimpleGrid(Env):
 
     @property
     def action_space(self):
-        return Discrete(4)
+        return self._action_space
 
     @property
     def state_space(self):
-        return VectorState(2)
+        return self._state_space
 
     def step(self, action):
-        x = self.state_space.data[0]
-        y = self.state_space.data[1]
+        action = SimpleGrid.Action(action)
+        x, y = self._state_space.data
         if action == SimpleGrid.Action.UP:
             if y != 0:
                 y -= 1
@@ -92,10 +90,9 @@ class SimpleGrid(Env):
                 x -= 1
 
         if (x, y) not in self.walls:
-            self.state_space.data[0] = x
-            self.state_space.data[1] = y
+            self._state_space.data = np.array((x, y))
 
-        state = (self.state_space.data[0], self.state_space.data[1])
+        state = tuple(self._state_space.data)
         try:
             reward = self.rewards[state]
         except KeyError:
@@ -105,11 +102,14 @@ class SimpleGrid(Env):
         if state == self.terminal:
             done = True
 
-        return self.state_space, reward, done
+        return self._state_space, reward, done
 
     def reset(self):
-        self.state_space.data = self.start
-        return self.state_space
+        self._state_space.data = self.start
+        return self._state_space
+
+    def visualize(self):
+        print(self.state_space.data)
 
 
 class ActionSpace(ABC):
@@ -150,6 +150,7 @@ def inference():
         state, reward, done = env.step(action)
         total_reward += reward
         step += 1
+        env.visualize()
     if done:
         print("Finish")
     else:
